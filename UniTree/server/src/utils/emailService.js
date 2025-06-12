@@ -20,21 +20,43 @@ class EmailService {
           }
         });
       } else {
-        // Development configuration (use ethereal for testing)
-        this.transporter = nodemailer.createTransport({
-          host: 'smtp.ethereal.email',
-          port: 587,
-          auth: {
-            user: 'ethereal.user@ethereal.email',
-            pass: 'ethereal.pass'
-          }
-        });
+        // Development configuration
+        if (process.env.EMAIL_USER && process.env.EMAIL_PASSWORD) {
+          // Use Gmail configuration for development if credentials are provided
+          this.transporter = nodemailer.createTransport({
+            service: 'gmail',
+            host: 'smtp.gmail.com',
+            port: 587,
+            secure: false, // true for 465, false for other ports
+            auth: {
+              user: process.env.EMAIL_USER,
+              pass: process.env.EMAIL_PASSWORD
+            },
+            tls: {
+              rejectUnauthorized: false
+            }
+          });
+        } else {
+          // Fallback to ethereal for testing
+          this.transporter = nodemailer.createTransport({
+            host: 'smtp.ethereal.email',
+            port: 587,
+            auth: {
+              user: 'ethereal.user@ethereal.email',
+              pass: 'ethereal.pass'
+            }
+          });
+        }
       }
 
       // Verify transporter configuration
       this.transporter.verify((error, success) => {
         if (error) {
           logger.error('Email transporter verification failed:', error);
+          logger.error('If using Gmail, make sure you have:');
+          logger.error('1. Enabled 2-factor authentication');
+          logger.error('2. Generated an App Password (not your regular password)');
+          logger.error('3. Used the App Password in EMAIL_PASSWORD environment variable');
         } else {
           logger.info('Email transporter is ready to send emails');
         }
