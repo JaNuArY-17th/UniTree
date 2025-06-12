@@ -2,15 +2,16 @@ const express = require('express');
 const router = express.Router();
 const { auth } = require('../middleware/auth');
 const Tree = require('../models/Tree');
+const TreeType = require('../models/TreeType');
 const User = require('../models/User');
 const Point = require('../models/Point');
 const logger = require('../utils/logger');
 
 // Get all available tree types
-router.get('/types', auth, async (req, res) => {
+router.get('/types', async (req, res) => {
   try {
-    const types = await Tree.distinct('type');
-    res.json(types);
+    const treeTypes = await TreeType.find({ isActive: true }).sort({ createdAt: 1 });
+    res.json(treeTypes);
   } catch (error) {
     logger.error('Get tree types error:', error);
     res.status(500).json({ message: 'Server error' });
@@ -53,8 +54,30 @@ router.post('/purchase', auth, async (req, res) => {
 // Get all trees for the current user
 router.get('/', auth, async (req, res) => {
   try {
-    const trees = await Tree.find({ userId: req.user.id });
-    res.json(trees);
+    console.log('Get trees request - User ID:', req.user._id);
+    const trees = await Tree.find({ userId: req.user._id });
+    console.log('Found trees:', trees.length);
+    
+    // Update each tree's stage based on accumulated WiFi hours
+    const updatedTrees = [];
+    for (const tree of trees) {
+      // Update stage based on current WiFi hours
+      tree.updateStageFromWifiHours();
+      // Update health score
+      tree.updateHealthScore();
+      // Save if there were changes
+      await tree.save();
+      updatedTrees.push(tree);
+    }
+    
+    console.log('Trees after stage update:', updatedTrees.map(t => ({ 
+      id: t._id, 
+      species: t.species, 
+      stage: t.currentStage, 
+      wifiHours: t.wifiHoursAccumulated 
+    })));
+    
+    res.json(updatedTrees);
   } catch (error) {
     console.error('Error fetching trees:', error);
     res.status(500).json({ message: 'Error fetching trees' });
@@ -64,10 +87,18 @@ router.get('/', auth, async (req, res) => {
 // Get a specific tree
 router.get('/:id', auth, async (req, res) => {
   try {
-    const tree = await Tree.findOne({ _id: req.params.id, userId: req.user.id });
+    const tree = await Tree.findOne({ _id: req.params.id, userId: req.user._id });
     if (!tree) {
       return res.status(404).json({ message: 'Tree not found' });
     }
+    
+    // Update stage based on current WiFi hours
+    tree.updateStageFromWifiHours();
+    // Update health score
+    tree.updateHealthScore();
+    // Save if there were changes
+    await tree.save();
+    
     res.json(tree);
   } catch (error) {
     console.error('Error fetching tree:', error);
@@ -80,7 +111,7 @@ router.post('/', auth, async (req, res) => {
   try {
     const tree = new Tree({
       ...req.body,
-      userId: req.user.id,
+      userId: req.user._id,
       plantedDate: new Date(),
       lastWatered: new Date(),
       healthScore: 100,
@@ -97,7 +128,7 @@ router.post('/', auth, async (req, res) => {
 router.put('/:id', auth, async (req, res) => {
   try {
     const tree = await Tree.findOneAndUpdate(
-      { _id: req.params.id, userId: req.user.id },
+      { _id: req.params.id, userId: req.user._id },
       { $set: req.body },
       { new: true }
     );
@@ -111,10 +142,57 @@ router.put('/:id', auth, async (req, res) => {
   }
 });
 
+// Add WiFi hours to trees
+router.post('/add-wifi-hours', auth, async (req, res) => {
+  try {
+    const { hours } = req.body;
+    
+    if (!hours || hours <= 0) {
+      return res.status(400).json({ message: 'Valid hours amount is required' });
+    }
+
+    // Get all user's trees
+    const trees = await Tree.find({ userId: req.user._id });
+    
+    if (trees.length === 0) {
+      return res.status(404).json({ message: 'No trees found' });
+    }
+
+    const updatedTrees = [];
+    
+    // Add WiFi hours to all trees
+    for (const tree of trees) {
+      const result = tree.addWifiHours(hours);
+      await tree.save();
+      
+      updatedTrees.push({
+        treeId: tree._id,
+        name: tree.name,
+        species: tree.species,
+        ...result
+      });
+    }
+
+    logger.info('WiFi hours added to trees:', { 
+      userId: req.user.id, 
+      hours, 
+      treesUpdated: updatedTrees.length 
+    });
+
+    res.json({
+      message: `Added ${hours} WiFi hours to ${updatedTrees.length} tree(s)`,
+      trees: updatedTrees
+    });
+  } catch (error) {
+    logger.error('Add WiFi hours error:', error);
+    res.status(500).json({ message: 'Error adding WiFi hours' });
+  }
+});
+
 // Delete a tree
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const tree = await Tree.findOneAndDelete({ _id: req.params.id, userId: req.user.id });
+    const tree = await Tree.findOneAndDelete({ _id: req.params.id, userId: req.user._id });
     if (!tree) {
       return res.status(404).json({ message: 'Tree not found' });
     }
@@ -138,12 +216,18 @@ router.post('/redeem', auth, async (req, res) => {
       return res.status(400).json({ message: 'Species ID is required' });
     }
 
+    // Get tree type information
+    const treeType = await TreeType.findOne({ id: speciesId, isActive: true });
+    if (!treeType) {
+      return res.status(400).json({ message: 'Invalid tree species' });
+    }
+
     // Get user from auth middleware
     const user = req.user;
     console.log('Debug - User points:', user.points);
 
-    // Check if user has enough points
-    const TREE_COST = 100;
+    // Check if user has enough points using tree type cost
+    const TREE_COST = treeType.cost || 100;
     if (user.points < TREE_COST) {
       return res.status(400).json({ 
         message: `Insufficient points. You need ${TREE_COST} points but have ${user.points}.` 
@@ -153,12 +237,15 @@ router.post('/redeem', auth, async (req, res) => {
     // Create new tree
     const tree = new Tree({
       userId: user._id,
-      species: speciesId,
-      name: `${speciesId} Tree`,
+      treeTypeId: speciesId,
+      species: treeType.name,
+      name: `${treeType.name}`,
       plantedDate: new Date(),
       lastWatered: new Date(),
       healthScore: 100,
-      stage: 'sapling',
+      currentStage: 0,
+      wifiHoursAccumulated: 0,
+      totalHoursRequired: 6,
       location: {
         latitude: 0,
         longitude: 0

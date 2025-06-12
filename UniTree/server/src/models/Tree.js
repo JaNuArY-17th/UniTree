@@ -6,10 +6,14 @@ const treeSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
-  species: {
+  treeTypeId: {
     type: String,
     required: true,
-    enum: ['oak', 'maple', 'pine']  // Match the species IDs from the mobile app
+    ref: 'TreeType'
+  },
+  species: {
+    type: String,
+    required: true
   },
   name: {
     type: String,
@@ -25,10 +29,19 @@ const treeSchema = new mongoose.Schema({
     required: true,
     default: Date.now
   },
-  stage: {
-    type: String,
-    enum: ['sapling', 'young', 'mature'],
-    default: 'sapling'
+  currentStage: {
+    type: Number,
+    min: 0,
+    max: 5,
+    default: 0
+  },
+  wifiHoursAccumulated: {
+    type: Number,
+    default: 0
+  },
+  totalHoursRequired: {
+    type: Number,
+    default: 6 // 6 hours total (1 hour per stage from 0 to 5)
   },
   healthScore: {
     type: Number,
@@ -54,9 +67,13 @@ const treeSchema = new mongoose.Schema({
     },
     type: {
       type: String,
-      enum: ['PLANTED', 'STAGE_CHANGE', 'PERFECT_HEALTH']
+      enum: ['PLANTED', 'STAGE_CHANGE', 'PERFECT_HEALTH', 'WIFI_GROWTH']
     },
-    description: String
+    description: String,
+    metadata: {
+      stage: Number,
+      hoursAccumulated: Number
+    }
   }]
 }, {
   timestamps: true
@@ -85,35 +102,57 @@ treeSchema.methods.updateHealthScore = function() {
   return this.healthScore;
 };
 
-// Update stage based on age
-treeSchema.methods.updateStage = function() {
-  const now = new Date();
-  const ageInDays = (now - this.plantedDate) / (1000 * 60 * 60 * 24);
+// Update stage based on WiFi hours accumulated
+treeSchema.methods.updateStageFromWifiHours = function() {
+  // Each stage requires 1 hour of WiFi time
+  const newStage = Math.min(5, Math.floor(this.wifiHoursAccumulated));
   
-  let newStage = this.stage;
-  if (ageInDays >= 90) { // 3 months
-    newStage = 'mature';
-  } else if (ageInDays >= 30) { // 1 month
-    newStage = 'young';
-  }
-
   // Add milestone if stage changed
-  if (newStage !== this.stage) {
+  if (newStage > this.currentStage) {
     this.milestones.push({
       type: 'STAGE_CHANGE',
-      description: `Grew to ${newStage} stage`
+      description: `Grew to stage ${newStage} with ${this.wifiHoursAccumulated} hours of university WiFi`,
+      metadata: {
+        stage: newStage,
+        hoursAccumulated: this.wifiHoursAccumulated
+      }
     });
-    this.stage = newStage;
+    this.currentStage = newStage;
   }
   
-  return this.stage;
+  return this.currentStage;
 };
 
-// Pre-save middleware to update health and stage
+// Add WiFi hours to the tree
+treeSchema.methods.addWifiHours = function(hours) {
+  const previousHours = this.wifiHoursAccumulated;
+  this.wifiHoursAccumulated += hours;
+  
+  // Check if tree can grow to next stage
+  const stageChanged = this.updateStageFromWifiHours();
+  
+  // Add WiFi growth milestone
+  this.milestones.push({
+    type: 'WIFI_GROWTH',
+    description: `Added ${hours} hours of university WiFi time (Total: ${this.wifiHoursAccumulated} hours)`,
+    metadata: {
+      stage: this.currentStage,
+      hoursAccumulated: this.wifiHoursAccumulated
+    }
+  });
+  
+  return {
+    hoursAdded: hours,
+    totalHours: this.wifiHoursAccumulated,
+    stageChanged,
+    currentStage: this.currentStage
+  };
+};
+
+// Pre-save middleware to update health
 treeSchema.pre('save', function(next) {
   if (!this.isNew) {
     this.updateHealthScore();
-    this.updateStage();
   }
   next();
 });

@@ -12,7 +12,7 @@ const wifiSessionSchema = new mongoose.Schema({
   },
   bssid: {
     type: String,
-    required: true
+    required: false // Optional for backward compatibility
   },
   startTime: {
     type: Date,
@@ -22,15 +22,16 @@ const wifiSessionSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
-  pointsEarned: {
+  pointsAwarded: {
     type: Number,
     default: 0
   }
+}, {
+  timestamps: true
 });
 
-// Index for efficient queries
-wifiSessionSchema.index({ userId: 1, createdAt: -1 });
+// Index for faster queries
+wifiSessionSchema.index({ user: 1, startTime: -1 });
+wifiSessionSchema.index({ user: 1, endTime: 1 });
 
-const WifiSession = mongoose.model('WifiSession', wifiSessionSchema);
-
-module.exports = WifiSession; 
+module.exports = mongoose.model('WifiSession', wifiSessionSchema); 

@@ -15,10 +15,12 @@ async function seedData() {
 
     // Create a test user
     const user = await User.create({
-      name: 'Test User',
+      nickname: 'testuser',
+      fullname: 'Test User',
       email: 'test@university.edu',
-      password: 'password123',
-      university: 'Test University',
+      password: 'Password123!',
+      university: 'Hanoi',
+      studentId: 'STU001',
       points: 150
     });
     console.log('Created test user');
@@ -62,13 +64,15 @@ async function seedData() {
 
     // Create test point transaction
     await Point.create({
-      user: user._id,
+      userId: user._id,
       amount: 50,
       type: 'ACHIEVEMENT',
       description: 'First Tree Achievement Bonus',
-      reference: {
-        type: 'achievement',
-        id: achievement._id
+      metadata: {
+        sessionId: null,
+        startTime: new Date(),
+        endTime: new Date(),
+        hoursAwarded: 0
       }
     });
     console.log('Created test point transaction');

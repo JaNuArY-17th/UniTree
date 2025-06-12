@@ -13,7 +13,6 @@ const notificationSchema = new mongoose.Schema({
       'ACHIEVEMENT_UNLOCKED',
       'TREE_HEALTH_WARNING',
       'POINTS_MILESTONE',
-      'ATTENDANCE_REMINDER',
       'TREE_GROWTH'
     ]
   },

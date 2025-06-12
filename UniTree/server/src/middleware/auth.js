@@ -8,15 +8,20 @@ const auth = async (req, res, next) => {
   try {
     let token;
 
+    console.log('Auth middleware called for:', req.method, req.path);
+    console.log('Authorization header:', req.headers.authorization ? 'Present' : 'Missing');
+
     // Check if auth header exists and has Bearer format
     if (
       req.headers.authorization &&
       req.headers.authorization.startsWith('Bearer')
     ) {
       token = req.headers.authorization.split(' ')[1];
+      console.log('Token extracted from Bearer header:', token ? `${token.substring(0, 20)}...` : 'null');
     }
 
     if (!token) {
+      console.log('No token found, returning 401');
       return res.status(401).json({
         message: 'Not authorized to access this route'
       });
@@ -25,18 +30,27 @@ const auth = async (req, res, next) => {
     try {
       // Verify token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      console.log('Token decoded successfully:', { id: decoded.id, iat: decoded.iat, exp: decoded.exp });
       
       // Get user from token
-      req.user = await User.findById(decoded.id);
+      const user = await User.findById(decoded.id);
       
-      if (!req.user) {
+      if (!user) {
+        console.log('User not found for decoded token ID:', decoded.id);
         return res.status(401).json({
           message: 'User no longer exists'
         });
       }
 
+      console.log('User found and authenticated:', { id: user._id, email: user.email });
+
+      // Set both user and userId for backward compatibility
+      req.user = user;
+      req.user.userId = user._id;
+
       next();
     } catch (err) {
+      console.error('Token verification error:', err.message);
       return res.status(401).json({
         message: 'Token is invalid or expired'
       });

@@ -23,39 +23,4 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
-// Add points for attendance
-router.post('/attendance', auth, async (req, res) => {
-  try {
-    const { duration, startTime, endTime } = req.body;
-    const pointsEarned = Math.floor(duration * process.env.POINTS_PER_HOUR);
-
-    const pointTransaction = new Point({
-      userId: req.user._id,
-      amount: pointsEarned,
-      type: 'ATTENDANCE',
-      metadata: {
-        startTime,
-        endTime,
-        duration
-      }
-    });
-
-    await pointTransaction.save();
-
-    // Update user's total points
-    await User.findByIdAndUpdate(
-      req.user._id,
-      { $inc: { points: pointsEarned } }
-    );
-
-    res.json({
-      points: pointsEarned,
-      transaction: pointTransaction
-    });
-  } catch (error) {
-    console.error('Error adding attendance points:', error);
-    res.status(500).json({ message: 'Error adding points' });
-  }
-});
-
-module.exports = router; 
+module.exports = router;

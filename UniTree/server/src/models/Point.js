@@ -15,13 +15,14 @@ const pointSchema = new mongoose.Schema({
     enum: ['ATTENDANCE', 'TREE_PURCHASE', 'TREE_REDEMPTION', 'ACHIEVEMENT', 'BONUS'],
     required: true
   },
+  description: {
+    type: String
+  },
   metadata: {
+    sessionId: mongoose.Schema.Types.ObjectId,
     startTime: Date,
     endTime: Date,
-    duration: Number,
-    description: String,
-    achievementId: String,
-    treeId: mongoose.Schema.Types.ObjectId
+    hoursAwarded: Number
   }
 }, {
   timestamps: true
