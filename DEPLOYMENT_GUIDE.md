@@ -11,15 +11,18 @@ This guide covers deploying all components of the UniTree application: Backend S
 
 ## 1. Backend Server Deployment
 
-### Option A: Railway (Recommended)
+### Option A: Render (Recommended - Free Tier)
 
-1. **Sign up for Railway**: Go to [railway.app](https://railway.app)
+1. **Sign up for Render**: Go to [render.com](https://render.com)
 2. **Connect your repository**: Link your GitHub repository
-3. **Select the server directory**: Choose `UniTree/server` as the root
-4. **Environment Variables**: Set these in Railway dashboard:
+3. **Create Web Service**: 
+   - Root Directory: `UniTree/server`
+   - Build Command: `npm install`
+   - Start Command: `npm start`
+4. **Environment Variables**: Set these in Render dashboard:
    ```
    NODE_ENV=production
-   PORT=3000
+   PORT=10000
    MONGODB_URI=your_mongodb_connection_string
    JWT_SECRET=your_super_secure_jwt_secret
    JWT_EXPIRE=7d
@@ -32,31 +35,47 @@ This guide covers deploying all components of the UniTree application: Backend S
    MAX_REQUEST_SIZE=10mb
    CLIENT_URL=https://your-web-dashboard-url.com
    ```
-5. **Deploy**: Railway will automatically deploy using the `railway.yaml` config
+5. **Deploy**: Render will automatically deploy on every push
 
-### Option B: Heroku
+### Option B: Railway (Database Only)
+*Note: Railway's trial plan only supports database hosting*
 
-1. **Install Heroku CLI**: Download from [heroku.com](https://heroku.com)
-2. **Login**: `heroku login`
-3. **Create app**: `heroku create your-app-name`
-4. **Set environment variables**:
-   ```bash
-   heroku config:set NODE_ENV=production
-   heroku config:set MONGODB_URI=your_mongodb_connection_string
-   heroku config:set JWT_SECRET=your_super_secure_jwt_secret
-   # ... (all other environment variables)
+1. **Sign up for Railway**: Go to [railway.app](https://railway.app)
+2. **Deploy MongoDB**: Use Railway for your database instead of MongoDB Atlas
+3. **Get connection string**: Use Railway's MongoDB URL in other deployment options
+
+### Option C: Vercel (Serverless Functions)
+
+1. **Sign up for Vercel**: Go to [vercel.com](https://vercel.com)
+2. **Install Vercel CLI**: `npm i -g vercel`
+3. **Create `vercel.json`** in `UniTree/server`:
+   ```json
+   {
+     "version": 2,
+     "builds": [
+       {
+         "src": "src/app.js",
+         "use": "@vercel/node"
+       }
+     ],
+     "routes": [
+       {
+         "src": "/(.*)",
+         "dest": "src/app.js"
+       }
+     ]
+   }
    ```
-5. **Deploy**:
-   ```bash
-   cd UniTree/server
-   git init
-   heroku git:remote -a your-app-name
-   git add .
-   git commit -m "Deploy backend"
-   git push heroku main
-   ```
+4. **Deploy**: `vercel --prod`
 
-### Option C: Docker (Any cloud provider)
+### Option D: Heroku (Free alternatives)
+
+**Since Heroku discontinued free tier, try these instead:**
+- **Adaptable.io** - Free Node.js hosting
+- **Cyclic.sh** - Free serverless Node.js
+- **Glitch.com** - Free with limitations
+
+### Option E: Docker (Any cloud provider)
 
 1. **Build image**:
    ```bash
@@ -248,15 +267,22 @@ NEXTAUTH_URL=https://your-web-url.com
 ## Quick Deploy Commands
 
 ```bash
-# Deploy backend to Railway (after setup)
+# Deploy backend to Render (recommended)
+# 1. Connect GitHub repo to render.com dashboard
+# 2. Set root directory to UniTree/server
+# 3. Deploy automatically
+
+# Deploy backend to Vercel (serverless)
 cd UniTree/server
-railway up
+npm i -g vercel
+vercel --prod
 
 # Build mobile app
 cd UniTree/mobile
+npm install -g @expo/eas-cli
 eas build --platform android
 
-# Deploy web to Vercel (after setup)
+# Deploy web to Vercel
 cd UniTree/web
 vercel --prod
 ```
